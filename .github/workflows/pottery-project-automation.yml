@@ -25,7 +25,7 @@ jobs:
             const PROJECT_NUMBER = 1;               // change to your project number
 
             const STATUS_FIELD_NAME = "Status";
-            const THROWN_DATE_FIELD_NAME = "Thrown Date";
+            const THROWN_DATE_FIELD_NAMES = ["Thrown Date", "Date Thrown"];
 
             const FROM_STATUS = "Thrown";
             const TO_STATUS = "Ready to trim";
@@ -95,6 +95,7 @@ jobs:
                             id
                             number
                             title
+                            createdAt
                             closed
                             url
                           }
@@ -152,11 +153,13 @@ jobs:
             }
 
             const thrownDateField = project.fields.nodes.find(
-              f => f && f.name === THROWN_DATE_FIELD_NAME
+              f => f && THROWN_DATE_FIELD_NAMES.includes(f.name)
             );
 
             if (!thrownDateField) {
-              throw new Error(`Could not find field named '${THROWN_DATE_FIELD_NAME}'`);
+              console.log(
+                `Could not find a thrown date field (${THROWN_DATE_FIELD_NAMES.join(", ")}); falling back to issue creation date.`
+              );
             }
 
             const targetStatusOption = statusField.options.find(
@@ -203,15 +206,16 @@ jobs:
                 v => v?.field?.id === statusField.id
               );
 
-              const thrownDateValue = item.fieldValues.nodes.find(
-                v => v?.field?.id === thrownDateField.id
-              );
+              const thrownDateValue = thrownDateField
+                ? item.fieldValues.nodes.find(v => v?.field?.id === thrownDateField.id)
+                : undefined;
 
               const currentStatus = statusValue?.name;
-              const thrownDate = thrownDateValue?.date;
+              const thrownDate = thrownDateValue?.date ?? issue.createdAt?.substring(0, 10);
 
               if (!thrownDate) {
-                console.log(`Skipping #${issue.number} because '${THROWN_DATE_FIELD_NAME}' is not set`);
+                const dateSource = thrownDateField?.name ?? "issue creation date";
+                console.log(`Skipping #${issue.number} because '${dateSource}' is not set`);
                 continue;
               }
 
@@ -220,7 +224,7 @@ jobs:
 
               if (isThrown && isOldEnough) {
                 console.log(
-                  `Moving #${issue.number} '${issue.title}' from '${FROM_STATUS}' to '${TO_STATUS}'. Thrown Date: ${thrownDate}`
+                  `Moving #${issue.number} '${issue.title}' from '${FROM_STATUS}' to '${TO_STATUS}'. Date used: ${thrownDate}`
                 );
 
                 await graphql(updateStatusMutation, {
