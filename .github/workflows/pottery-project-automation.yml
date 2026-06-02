@@ -215,7 +215,7 @@ jobs:
 
               if (!thrownDate) {
                 const dateSource = thrownDateField?.name ?? "issue creation date";
-                console.log(`Skipping #${issue.number} because '${dateSource}' is not set`);
+                console.log(`Skipping #${issue.number} because no date is available (checked: '${dateSource}')`);
                 continue;
               }
 
