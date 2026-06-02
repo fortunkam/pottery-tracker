@@ -47,7 +47,10 @@ jobs:
                 return await projectGithub.graphql(query, variables);
               } catch (error) {
                 const hasProjectAccessError = Array.isArray(error?.errors) && error.errors.some(
-                  entry => entry?.type === "FORBIDDEN" && entry?.message === "Resource not accessible by personal access token"
+                  entry =>
+                    entry?.type === "FORBIDDEN" &&
+                    entry?.message?.includes("Resource not accessible") &&
+                    entry?.message?.includes("personal access token")
                 );
 
                 if (hasProjectAccessError) {
