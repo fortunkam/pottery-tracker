@@ -211,7 +211,7 @@ jobs:
                 : undefined;
 
               const currentStatus = statusValue?.name;
-              const thrownDate = thrownDateValue?.date ?? issue.createdAt?.substring(0, 10);
+              const thrownDate = thrownDateValue?.date ?? issue.createdAt?.split("T")[0];
 
               if (!thrownDate) {
                 const dateSource = thrownDateField?.name ?? "issue creation date";
