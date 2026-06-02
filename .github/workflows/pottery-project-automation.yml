@@ -18,9 +18,8 @@ jobs:
         env:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
         with:
+          github-token: ${{ secrets.PROJECT_TOKEN }}
           script: |
-            const { getOctokit } = require("@actions/github");
-
             const OWNER = "fortunkam";              // change if needed
             const OWNER_TYPE = "user";              // "user" or "org"
             const PROJECT_NUMBER = 1;               // change to your project number
@@ -40,7 +39,7 @@ jobs:
               );
             }
 
-            const projectGithub = getOctokit(projectToken);
+            const projectGithub = github;
 
             async function graphql(query, variables) {
               try {
