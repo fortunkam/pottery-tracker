@@ -211,11 +211,16 @@ jobs:
                 : undefined;
 
               const currentStatus = statusValue?.name;
-              const thrownDate = thrownDateValue?.date ?? issue.createdAt?.split("T")[0];
+              const issueCreatedDate = issue.createdAt ? issue.createdAt.split("T")[0] : undefined;
+              const thrownDate = thrownDateValue?.date ?? issueCreatedDate;
 
               if (!thrownDate) {
-                const dateSource = thrownDateField?.name ?? "issue creation date";
-                console.log(`Skipping #${issue.number} because no date is available (checked: '${dateSource}')`);
+                const checkedDateSources = [thrownDateField?.name, "issue creation date"]
+                  .filter(Boolean)
+                  .join(", ");
+                console.log(
+                  `Skipping #${issue.number} because no date is available (checked: '${checkedDateSources}')`
+                );
                 continue;
               }
 
