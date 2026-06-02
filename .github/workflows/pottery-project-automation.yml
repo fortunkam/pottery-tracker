@@ -15,9 +15,12 @@ jobs:
     steps:
       - name: Move thrown items to ready to trim after 2 days
         uses: actions/github-script@v7
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
         with:
-          github-token: ${{ secrets.PROJECT_TOKEN }}
           script: |
+            const { getOctokit } = require("@actions/github");
+
             const OWNER = "fortunkam";              // change if needed
             const OWNER_TYPE = "user";              // "user" or "org"
             const PROJECT_NUMBER = 1;               // change to your project number
@@ -28,6 +31,30 @@ jobs:
             const FROM_STATUS = "Thrown";
             const TO_STATUS = "Ready to trim";
             const AGE_DAYS = 2;
+
+            const projectToken = process.env.PROJECT_TOKEN;
+
+            if (!projectToken) {
+              throw new Error(
+                "Missing PROJECT_TOKEN secret. Set it to a classic personal access token with the 'project' scope. Fine-grained personal access tokens cannot access Projects owned by a user account."
+              );
+            }
+
+            const projectGithub = getOctokit(projectToken);
+
+            async function graphql(query, variables) {
+              try {
+                return await projectGithub.graphql(query, variables);
+              } catch (error) {
+                if (error?.message?.includes("Resource not accessible by personal access token")) {
+                  throw new Error(
+                    "PROJECT_TOKEN must be a classic personal access token with the 'project' scope (or 'repo', which also grants project access). Fine-grained personal access tokens cannot access Projects owned by a user account."
+                  );
+                }
+
+                throw error;
+              }
+            }
 
             const projectQuery = `
               query($login: String!, $number: Int!) {
@@ -98,7 +125,7 @@ jobs:
               }
             `;
 
-            const result = await github.graphql(projectQuery, {
+            const result = await graphql(projectQuery, {
               login: OWNER,
               number: PROJECT_NUMBER
             });
@@ -190,7 +217,7 @@ jobs:
                   `Moving #${issue.number} '${issue.title}' from '${FROM_STATUS}' to '${TO_STATUS}'. Thrown Date: ${thrownDate}`
                 );
 
-                await github.graphql(updateStatusMutation, {
+                await graphql(updateStatusMutation, {
                   projectId: project.id,
                   itemId: item.id,
                   fieldId: statusField.id,
