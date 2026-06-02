@@ -5,23 +5,26 @@ name: Move pottery items ready to trim
 on:
   workflow_dispatch:
   schedule:
+    # Runs every morning UK time
     - cron: "15 7 * * *"
-      timezone: "Europe/London"
 
 jobs:
   move-ready-to-trim:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Move old thrown items to ready to trim
+      - name: Move thrown items to ready to trim after 2 days
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.PROJECT_TOKEN }}
           script: |
             const OWNER = "fortunkam";              // change if needed
             const OWNER_TYPE = "user";              // "user" or "org"
-            const PROJECT_NUMBER = 1;               // your project number
+            const PROJECT_NUMBER = 1;               // change to your project number
+
             const STATUS_FIELD_NAME = "Status";
+            const THROWN_DATE_FIELD_NAME = "Thrown Date";
+
             const FROM_STATUS = "Thrown";
             const TO_STATUS = "Ready to trim";
             const AGE_DAYS = 2;
@@ -31,8 +34,14 @@ jobs:
                 ${OWNER_TYPE === "org" ? "organization" : "user"}(login: $login) {
                   projectV2(number: $number) {
                     id
-                    fields(first: 50) {
+
+                    fields(first: 100) {
                       nodes {
+                        ... on ProjectV2Field {
+                          id
+                          name
+                          dataType
+                        }
                         ... on ProjectV2SingleSelectField {
                           id
                           name
@@ -43,26 +52,38 @@ jobs:
                         }
                       }
                     }
+
                     items(first: 100) {
                       nodes {
                         id
+
                         content {
                           ... on Issue {
                             id
                             number
                             title
-                            createdAt
                             closed
                             url
                           }
                         }
-                        fieldValues(first: 50) {
+
+                        fieldValues(first: 100) {
                           nodes {
                             ... on ProjectV2ItemFieldSingleSelectValue {
                               name
                               optionId
                               field {
                                 ... on ProjectV2SingleSelectField {
+                                  id
+                                  name
+                                }
+                              }
+                            }
+
+                            ... on ProjectV2ItemFieldDateValue {
+                              date
+                              field {
+                                ... on ProjectV2Field {
                                   id
                                   name
                                 }
@@ -85,6 +106,10 @@ jobs:
             const ownerNode = OWNER_TYPE === "org" ? result.organization : result.user;
             const project = ownerNode.projectV2;
 
+            if (!project) {
+              throw new Error(`Could not find project number ${PROJECT_NUMBER}`);
+            }
+
             const statusField = project.fields.nodes.find(
               f => f && f.name === STATUS_FIELD_NAME
             );
@@ -93,18 +118,29 @@ jobs:
               throw new Error(`Could not find field named '${STATUS_FIELD_NAME}'`);
             }
 
-            const targetOption = statusField.options.find(
+            const thrownDateField = project.fields.nodes.find(
+              f => f && f.name === THROWN_DATE_FIELD_NAME
+            );
+
+            if (!thrownDateField) {
+              throw new Error(`Could not find field named '${THROWN_DATE_FIELD_NAME}'`);
+            }
+
+            const targetStatusOption = statusField.options.find(
               o => o.name === TO_STATUS
             );
 
-            if (!targetOption) {
+            if (!targetStatusOption) {
               throw new Error(`Could not find status option '${TO_STATUS}'`);
             }
 
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - AGE_DAYS);
 
-            const mutation = `
+            // Compare dates only, not time-of-day.
+            const cutoffDateOnly = cutoff.toISOString().substring(0, 10);
+
+            const updateStatusMutation = `
               mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
                 updateProjectV2ItemFieldValue(
                   input: {
@@ -134,17 +170,31 @@ jobs:
                 v => v?.field?.id === statusField.id
               );
 
-              const isThrown = statusValue?.name === FROM_STATUS;
-              const isOldEnough = new Date(issue.createdAt) <= cutoff;
+              const thrownDateValue = item.fieldValues.nodes.find(
+                v => v?.field?.id === thrownDateField.id
+              );
+
+              const currentStatus = statusValue?.name;
+              const thrownDate = thrownDateValue?.date;
+
+              if (!thrownDate) {
+                console.log(`Skipping #${issue.number} because '${THROWN_DATE_FIELD_NAME}' is not set`);
+                continue;
+              }
+
+              const isThrown = currentStatus === FROM_STATUS;
+              const isOldEnough = thrownDate <= cutoffDateOnly;
 
               if (isThrown && isOldEnough) {
-                console.log(`Moving #${issue.number} '${issue.title}' to '${TO_STATUS}'`);
+                console.log(
+                  `Moving #${issue.number} '${issue.title}' from '${FROM_STATUS}' to '${TO_STATUS}'. Thrown Date: ${thrownDate}`
+                );
 
-                await github.graphql(mutation, {
+                await github.graphql(updateStatusMutation, {
                   projectId: project.id,
                   itemId: item.id,
                   fieldId: statusField.id,
-                  optionId: targetOption.id
+                  optionId: targetStatusOption.id
                 });
               }
             }
