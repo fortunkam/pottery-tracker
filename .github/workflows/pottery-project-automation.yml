@@ -46,7 +46,11 @@ jobs:
               try {
                 return await projectGithub.graphql(query, variables);
               } catch (error) {
-                if (error?.message?.includes("Resource not accessible by personal access token")) {
+                const hasProjectAccessError = Array.isArray(error?.errors) && error.errors.some(
+                  entry => entry?.type === "FORBIDDEN" && entry?.message === "Resource not accessible by personal access token"
+                );
+
+                if (hasProjectAccessError) {
                   throw new Error(
                     "PROJECT_TOKEN must be a classic personal access token with the 'project' scope (or 'repo', which also grants project access). Fine-grained personal access tokens cannot access Projects owned by a user account."
                   );
